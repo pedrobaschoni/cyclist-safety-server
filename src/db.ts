@@ -64,6 +64,11 @@ CREATE TABLE IF NOT EXISTS envios_sms (
   criado_em     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_envios_queda ON envios_sms (queda_id);
+
+CREATE TABLE IF NOT EXISTS tokens_push (
+  token          TEXT PRIMARY KEY,
+  atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
 
 /**
@@ -290,4 +295,27 @@ export async function buscarLinkConfirmacao(
     [token]
   );
   return rows[0] ?? null;
+}
+
+// ─────────────────────────────────────────
+//  Celulares para notificação push (Firebase)
+// ─────────────────────────────────────────
+
+export async function salvarTokenPush(token: string): Promise<void> {
+  await db().query(
+    `INSERT INTO tokens_push (token) VALUES ($1)
+     ON CONFLICT (token) DO UPDATE SET atualizado_em = now()`,
+    [token]
+  );
+}
+
+export async function listarTokensPush(): Promise<string[]> {
+  const { rows } = await db().query<{ token: string }>(
+    "SELECT token FROM tokens_push ORDER BY atualizado_em DESC LIMIT 20"
+  );
+  return rows.map((r) => r.token);
+}
+
+export async function removerTokensPush(tokens: string[]): Promise<void> {
+  await db().query("DELETE FROM tokens_push WHERE token = ANY($1)", [tokens]);
 }

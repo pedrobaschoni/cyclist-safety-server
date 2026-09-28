@@ -1,8 +1,9 @@
-# CyclistSafe — Servidor 2.0
+# CyclistSafe — Servidor 2.2
 
 Servidor intermediário do CyclistSafe: recebe as quedas do ESP32, guarda tudo
 no PostgreSQL (Neon), conta o tempo para o ciclista responder e envia SMS aos
-contatos de emergência.
+contatos de emergência. Também manda notificação push (Firebase) para o
+celular do ciclista, que chega mesmo com o app fechado.
 
 ## Como funciona o alerta
 
@@ -28,7 +29,7 @@ desta pasta (`src/`, `package.json`, `package-lock.json`, `tsconfig.json`,
 
 ```
 git add -A
-git commit -m "Servidor 2.0: PostgreSQL, contagem regressiva e SMS"
+git commit -m "Servidor 2.2: notificações push (Firebase)"
 git push
 ```
 
@@ -44,9 +45,17 @@ Render → seu serviço → **Environment** → **Add Environment Variable**:
 | `TWILIO_FROM` | Não | Número do Twilio no formato `+1...` |
 | `REENVIO_SEGUNDOS` | Não | Intervalo entre lembretes (padrão: 120) |
 | `MAX_TENTATIVAS` | Não | Total de envios, contando o primeiro (padrão: 3) |
+| `FIREBASE_SERVICE_ACCOUNT` | Não | Conteúdo **inteiro** do `.json` da conta de serviço do Firebase (push) |
 
 **Sem as variáveis do Twilio o servidor funciona em modo simulado:** os SMS
 aparecem nos logs do Render e ficam registrados no banco com status `SIMULADO`.
+
+**Sem `FIREBASE_SERVICE_ACCOUNT` o push fica desativado** e o app só recebe
+alertas enquanto estiver aberto (WebSocket). Nunca coloque esse `.json` no
+GitHub: ele dá acesso total ao projeto Firebase.
+
+O servidor precisa de **Node 22 ou mais novo** (o `package.json` já pede isso
+e o Render respeita).
 
 Build e start continuam os mesmos:
 - Build Command: `npm install && npm run build`
@@ -55,7 +64,8 @@ Build e start continuam os mesmos:
 ### 3. Confira
 
 Abra `https://SEU-SERVIDOR.onrender.com/api/health`. Deve aparecer
-`"banco": "conectado"` e `"sms": "simulado"` (ou `"twilio"`).
+`"banco": "conectado"`, `"sms": "simulado"` (ou `"twilio"`) e
+`"push": "firebase"` (ou `"desativado"`).
 
 Depois abra o app no celular: ele envia seus contatos para o servidor
 automaticamente ao conectar.
@@ -73,6 +83,7 @@ automaticamente ao conectar.
 | POST | `/api/eventos/:id/cancelar` | App | "Estou bem" |
 | POST | `/api/eventos/:id/enviar-agora` | App | "Preciso de ajuda" |
 | GET / PUT | `/api/config` | App | Nome, tempo para cancelar e contatos |
+| POST | `/api/push/registrar` | App | Registra o celular para push `{ token }` |
 | GET | `/api/dispositivos` | App | Último status do ESP32 |
 | GET / POST | `/c/:token` | Familiar | Página do link do SMS |
 | WS | `/ws` | App | Eventos em tempo real |
@@ -84,6 +95,7 @@ automaticamente ao conectar.
 - `quedas`: impacto, localização, status e horário de cada etapa
 - `links_confirmacao`: um link por contato em cada alerta
 - `envios_sms`: cada SMS enviado (tipo, status, erro)
+- `tokens_push`: celulares registrados para notificação push
 
 ## Rodar no computador
 

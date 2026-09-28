@@ -28,6 +28,7 @@ import {
   registrarEnvio,
   urlMapa,
 } from "./db";
+import { enviarPush } from "./push";
 import { enviarSms } from "./sms";
 import { ContatoRow, QuedaRow } from "./tipos";
 import { transmitir } from "./websocket";
@@ -96,6 +97,11 @@ export async function registrarQueda(dados: {
 
   const q = await inserirQueda({ id: randomUUID(), ...dados, prazo });
   transmitir("QUEDA", quedaParaApi(q));
+  void enviarPush(
+    "⚠️ Possível queda detectada",
+    `Toque para responder. Seus contatos serão avisados em ${tempoPreAlerta} s se você não disser que está bem.`,
+    { quedaId: q.id, tipo: "QUEDA" }
+  );
   agendar(q.id, prazo.getTime() - Date.now(), () => dispararAlerta(q.id).then(() => undefined));
 
   console.log(
@@ -147,6 +153,13 @@ export async function dispararAlerta(quedaId: string): Promise<QuedaRow | null> 
   );
   const final = atualizadas[0];
   publicarAtualizacao(final);
+  void enviarPush(
+    "Seus contatos foram avisados",
+    contatos.length > 0
+      ? `Enviamos sua localização para ${contatos.length} contato(s). Se estiver tudo bem, toque aqui e avise.`
+      : "Nenhum contato cadastrado — ninguém foi avisado. Cadastre contatos no app.",
+    { quedaId: q.id, tipo: "ALERTA_ENVIADO" }
+  );
   console.log(`[Alerta] Queda ${quedaId}: alerta enviado para ${contatos.length} contato(s)`);
 
   if (contatos.length > 0 && MAX_TENTATIVAS > 1) {
@@ -274,6 +287,11 @@ export async function confirmarPorLink(
   if (rows[0]) {
     cancelarTimer(link.quedaId); // para os lembretes
     publicarAtualizacao(rows[0]);
+    void enviarPush(
+      `${link.contatoNome} viu seu alerta`,
+      "Seu contato de emergência confirmou que recebeu a mensagem.",
+      { quedaId: link.quedaId, tipo: "CONFIRMADO" }
+    );
     console.log(`[Alerta] Queda ${link.quedaId}: confirmada por ${link.contatoNome}`);
     return { queda: rows[0], contatoNome: link.contatoNome, jaConfirmada: false };
   }

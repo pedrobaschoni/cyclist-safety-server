@@ -19,7 +19,9 @@ import {
   listarQuedas,
   quedaParaApi,
   salvarConfiguracao,
+  salvarTokenPush,
 } from "./db";
+import { pushConfigurado } from "./push";
 import { paginaConfirmacao, paginaLinkInvalido } from "./paginas";
 import { smsConfigurado } from "./sms";
 import { ApiResposta, StatusDispositivo } from "./tipos";
@@ -85,7 +87,7 @@ export function criarApp() {
     res.json(
       ok({
         servico: "CyclistSafe — servidor intermediário",
-        versao: "2.0.0",
+        versao: "2.2.0",
         documentacao: "Veja README.md",
       })
     );
@@ -98,9 +100,10 @@ export function criarApp() {
       res.json(
         ok({
           status: "ok",
-          versao: "2.0.0",
+          versao: "2.2.0",
           banco: "conectado",
           sms: smsConfigurado() ? "twilio" : "simulado",
+          push: pushConfigurado() ? "firebase" : "desativado",
           nomeCiclista: config.nomeCiclista,
           clientesWs: clientesConectados(),
           uptime: process.uptime(),
@@ -250,6 +253,17 @@ export function criarApp() {
       );
       console.log(`[Config] Salva: ${contatos.length} contato(s), cancelamento em ${tempo}s`);
       res.json(ok({ contatos: contatos.length, tempoPreAlerta: tempo }));
+    })
+  );
+
+  // ── App: registra o celular para receber notificações push ─
+  app.post(
+    "/api/push/registrar",
+    rota(async (req, res) => {
+      const token = String(req.body?.token ?? "").trim();
+      if (token.length < 20 || token.length > 4096) return erro(res, 400, "Token inválido");
+      await salvarTokenPush(token);
+      res.json(ok({ registrado: true }));
     })
   );
 

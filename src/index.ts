@@ -9,6 +9,7 @@ import { createServer } from "http";
 import { retomarAlertasPendentes } from "./alertas";
 import { criarApp, ultimosStatusDispositivos } from "./app";
 import { iniciarBanco } from "./db";
+import { pushConfigurado } from "./push";
 import { smsConfigurado } from "./sms";
 import { inicializarWebSocket } from "./websocket";
 
@@ -31,11 +32,12 @@ async function iniciar(): Promise<void> {
 
   httpServer.listen(PORT, () => {
     console.log("╔════════════════════════════════════════════╗");
-    console.log("║  CyclistSafe — servidor intermediário 2.0  ║");
+    console.log("║  CyclistSafe — servidor intermediário 2.2  ║");
     console.log("║  IFSP Campus Presidente Epitácio           ║");
     console.log("╚════════════════════════════════════════════╝");
     console.log(`Porta: ${PORT}`);
     console.log(`SMS: ${smsConfigurado() ? "Twilio (envio real)" : "SIMULADO (só aparece no log)"}`);
+    console.log(`Push: ${pushConfigurado() ? "Firebase ativo" : "desativado (sem FIREBASE_SERVICE_ACCOUNT)"}`);
   });
 }
 
