@@ -25,7 +25,30 @@ function horaBrasil(data: Date): string {
   });
 }
 
-function layout(titulo: string, cor: string, conteudo: string): string {
+function layout(
+  titulo: string,
+  cor: string,
+  conteudo: string,
+  acompanhar?: { token: string; status: string }
+): string {
+  // Consulta o status a cada 5 s; se mudou (ex.: ciclista disse que está bem),
+  // recarrega a página para mostrar a situação nova.
+  const script = acompanhar
+    ? `<script>
+  (function () {
+    var atual = ${JSON.stringify(acompanhar.status)};
+    var url = "/c/" + ${JSON.stringify(encodeURIComponent(acompanhar.token))} + "/estado";
+    setInterval(function () {
+      fetch(url, { cache: "no-store" })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j && j.dados && j.dados.status && j.dados.status !== atual) location.reload();
+        })
+        .catch(function () {});
+    }, 5000);
+  })();
+</script>`
+    : "";
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -59,6 +82,7 @@ function layout(titulo: string, cor: string, conteudo: string): string {
 </head>
 <body>
   <div class="cartao">${conteudo}</div>
+  ${script}
 </body>
 </html>`;
 }
@@ -80,6 +104,7 @@ export function paginaConfirmacao(
   acabouDeConfirmar = false
 ): string {
   const nome = escapar(nomeCiclista || "O ciclista");
+  const acompanhar = { token, status: q.status };
   const mapa = urlMapa(q.latitude, q.longitude);
   const detalhes = `
     <div class="linha"><span>Horário</span><span>${horaBrasil(q.detectada_em)}</span></div>
@@ -92,9 +117,10 @@ export function paginaConfirmacao(
       "#047857",
       `<div class="topo"><div class="marca">CYCLISTSAFE</div><h1>${nome} está bem 🎉</h1></div>
        <div class="corpo">
-         <p>${nome} informou pelo aplicativo que foi um alarme falso. Não é preciso fazer nada.</p>
+         <p>${nome} informou pelo aplicativo que está bem${q.alerta_enviado_em ? " e que foi um alarme falso" : ""}. Não é preciso fazer nada.</p>
          ${detalhes}
-       </div>`
+       </div>`,
+      acompanhar
     );
   }
 
@@ -110,7 +136,8 @@ export function paginaConfirmacao(
        <div class="corpo">
          <p>${texto} Se não conseguir contato, vá até a localização abaixo ou ligue 192 (SAMU).</p>
          ${detalhes}
-       </div>`
+       </div>`,
+      acompanhar
     );
   }
 
@@ -128,6 +155,7 @@ export function paginaConfirmacao(
          <button class="botao principal" type="submit">✔ Vi o alerta, estou verificando</button>
        </form>
        <div class="aviso">Em caso de emergência, ligue 192 (SAMU).</div>
-     </div>`
+     </div>`,
+    acompanhar
   );
 }

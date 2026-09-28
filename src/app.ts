@@ -270,7 +270,23 @@ export function criarApp() {
       const q = link ? await buscarQueda(link.quedaId) : null;
       if (!link || !q) return res.status(404).type("html").send(paginaLinkInvalido());
       const config = await lerConfiguracao();
-      res.type("html").send(paginaConfirmacao(q, link.contatoNome, config.nomeCiclista, token));
+      // ?ok=1 → acabou de confirmar (veio do redirecionamento do POST)
+      const acabouDeConfirmar =
+        req.query.ok === "1" && q.status === "CONFIRMADO" && q.confirmado_por === link.contatoNome;
+      res
+        .type("html")
+        .send(paginaConfirmacao(q, link.contatoNome, config.nomeCiclista, token, acabouDeConfirmar));
+    })
+  );
+
+  // Status atual — a página do familiar consulta a cada 5 s e se atualiza sozinha
+  app.get(
+    "/c/:token/estado",
+    rota(async (req, res) => {
+      const link = await buscarLinkConfirmacao(String(req.params.token));
+      const q = link ? await buscarQueda(link.quedaId) : null;
+      if (!q) return erro(res, 404, "Link não encontrado");
+      res.set("Cache-Control", "no-store").json(ok({ status: q.status }));
     })
   );
 
@@ -280,10 +296,8 @@ export function criarApp() {
       const token = String(req.params.token);
       const r = await confirmarPorLink(token);
       if (!r) return res.status(404).type("html").send(paginaLinkInvalido());
-      const config = await lerConfiguracao();
-      res
-        .type("html")
-        .send(paginaConfirmacao(r.queda, r.contatoNome, config.nomeCiclista, token, !r.jaConfirmada));
+      // Redireciona para o GET: assim recarregar a página não reenvia o formulário
+      res.redirect(303, `/c/${encodeURIComponent(token)}${r.jaConfirmada ? "" : "?ok=1"}`);
     })
   );
 
