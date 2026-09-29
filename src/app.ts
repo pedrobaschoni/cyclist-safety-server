@@ -11,7 +11,21 @@ import {
   registrarQueda,
 } from "./alertas";
 import {
+  bloqueadoPorTentativas,
+  conferirSenha,
+  exigirLogin,
+  gerarHashSenha,
+  gerarToken,
+  jwtConfigurado,
+  limparFalhasLogin,
+  registrarFalhaLogin,
+} from "./auth";
+import {
   buscarLinkConfirmacao,
+  buscarUsuarioPorEmail,
+  buscarUsuarioPorId,
+  contarUsuarios,
+  criarPrimeiroUsuario,
   buscarQueda,
   lerConfiguracao,
   listarContatos,
@@ -19,6 +33,7 @@ import {
   listarQuedas,
   quedaParaApi,
   salvarConfiguracao,
+  removerTokensPush,
   salvarTokenPush,
 } from "./db";
 import { pushConfigurado } from "./push";
@@ -53,6 +68,15 @@ function rota(fn: (req: Request, res: Response) => Promise<unknown>) {
   };
 }
 
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizarEmail(valor: unknown): string {
+  return String(valor ?? "").trim().toLowerCase();
+}
+
+/** Hash de uma senha qualquer, usado só para igualar o tempo de resposta do login. */
+const HASH_FALSO = "$2b$10$CwTycUXWue0Thq9StjUM0uJ8.3gTBZ2QsUnOa1JrQ2bl3yXfGJY2i";
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function idDaRota(req: Request): string | null {
@@ -74,6 +98,7 @@ function telefoneInternacional(tel: string): string {
 
 export function criarApp() {
   const app = express();
+  app.set("trust proxy", 1); // o Render fica na frente (IP real vem no X-Forwarded-For)
   app.use(cors({ origin: "*" }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
@@ -87,7 +112,7 @@ export function criarApp() {
     res.json(
       ok({
         servico: "CyclistSafe — servidor intermediário",
-        versao: "2.2.0",
+        versao: "2.3.0",
         documentacao: "Veja README.md",
       })
     );
@@ -100,10 +125,11 @@ export function criarApp() {
       res.json(
         ok({
           status: "ok",
-          versao: "2.2.0",
+          versao: "2.3.0",
           banco: "conectado",
           sms: smsConfigurado() ? "twilio" : "simulado",
           push: pushConfigurado() ? "firebase" : "desativado",
+          jwt: jwtConfigurado() ? "configurado" : "chave temporária",
           nomeCiclista: config.nomeCiclista,
           clientesWs: clientesConectados(),
           uptime: process.uptime(),
@@ -159,6 +185,77 @@ export function criarApp() {
       dispositivos.set(status.deviceId, status);
       transmitir("STATUS", status);
       res.json(ok({ recebido: true }));
+    })
+  );
+
+  // ── Login do app (JWT) ─────────────────────────────────────
+  // O app pergunta se já existe conta para mostrar "Criar conta" ou "Entrar"
+  app.get(
+    "/api/auth/status",
+    rota(async (_req, res) => {
+      res.json(ok({ temConta: (await contarUsuarios()) > 0 }));
+    })
+  );
+
+  // Primeiro acesso: cria a conta (só é permitido se ainda não existir nenhuma)
+  app.post(
+    "/api/auth/cadastro",
+    rota(async (req, res) => {
+      const nome = String(req.body?.nome ?? "").trim();
+      const email = normalizarEmail(req.body?.email);
+      const senha = String(req.body?.senha ?? "");
+      if (nome.length < 2 || nome.length > 60) return erro(res, 400, "Informe seu nome");
+      if (!EMAIL.test(email)) return erro(res, 400, "E-mail inválido");
+      if (senha.length < 6 || senha.length > 72) {
+        return erro(res, 400, "A senha deve ter entre 6 e 72 caracteres");
+      }
+
+      const usuario = await criarPrimeiroUsuario(nome, email, await gerarHashSenha(senha));
+      if (!usuario) return erro(res, 409, "Já existe uma conta cadastrada. Faça login.");
+
+      console.log(`[Auth] Conta criada: ${email}`);
+      res.status(201).json(
+        ok({ token: gerarToken(usuario), usuario: { nome: usuario.nome, email: usuario.email } })
+      );
+    })
+  );
+
+  app.post(
+    "/api/auth/login",
+    rota(async (req, res) => {
+      const ip = req.ip ?? "desconhecido";
+      if (bloqueadoPorTentativas(ip)) {
+        return erro(res, 429, "Muitas tentativas. Aguarde 15 minutos e tente de novo.");
+      }
+      const email = normalizarEmail(req.body?.email);
+      const senha = String(req.body?.senha ?? "");
+      const usuario = EMAIL.test(email) ? await buscarUsuarioPorEmail(email) : null;
+
+      // Confere a senha mesmo sem usuário, para o tempo de resposta não revelar
+      // se o e-mail existe ou não
+      const senhaCorreta = await conferirSenha(senha, usuario?.senha_hash ?? HASH_FALSO);
+      if (!usuario || !senhaCorreta) {
+        registrarFalhaLogin(ip);
+        return erro(res, 401, "E-mail ou senha incorretos");
+      }
+
+      limparFalhasLogin(ip);
+      console.log(`[Auth] Login: ${email}`);
+      res.json(
+        ok({ token: gerarToken(usuario), usuario: { nome: usuario.nome, email: usuario.email } })
+      );
+    })
+  );
+
+  // ── A partir daqui, as rotas do app exigem login ───────────
+  app.use(["/api/eventos", "/api/config", "/api/push", "/api/dispositivos", "/api/auth/eu"], exigirLogin);
+
+  app.get(
+    "/api/auth/eu",
+    rota(async (_req, res) => {
+      const u = await buscarUsuarioPorId(res.locals.usuario.id);
+      if (!u) return erro(res, 401, "Conta não encontrada — faça login novamente");
+      res.json(ok({ nome: u.nome, email: u.email }));
     })
   );
 
@@ -264,6 +361,16 @@ export function criarApp() {
       if (token.length < 20 || token.length > 4096) return erro(res, 400, "Token inválido");
       await salvarTokenPush(token);
       res.json(ok({ registrado: true }));
+    })
+  );
+
+  // Ao sair da conta, o celular para de receber notificações
+  app.post(
+    "/api/push/remover",
+    rota(async (req, res) => {
+      const token = String(req.body?.token ?? "").trim();
+      if (token) await removerTokensPush([token]);
+      res.json(ok({ removido: true }));
     })
   );
 

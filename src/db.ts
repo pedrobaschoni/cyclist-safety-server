@@ -69,6 +69,14 @@ CREATE TABLE IF NOT EXISTS tokens_push (
   token          TEXT PRIMARY KEY,
   atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS usuarios (
+  id          SERIAL PRIMARY KEY,
+  nome        TEXT NOT NULL,
+  email       TEXT NOT NULL UNIQUE,
+  senha_hash  TEXT NOT NULL,
+  criado_em   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
 
 /**
@@ -318,4 +326,51 @@ export async function listarTokensPush(): Promise<string[]> {
 
 export async function removerTokensPush(tokens: string[]): Promise<void> {
   await db().query("DELETE FROM tokens_push WHERE token = ANY($1)", [tokens]);
+}
+
+// ─────────────────────────────────────────
+//  Usuários (login)
+// ─────────────────────────────────────────
+
+export interface UsuarioRow {
+  id: number;
+  nome: string;
+  email: string;
+  senha_hash: string;
+}
+
+export async function contarUsuarios(): Promise<number> {
+  const { rows } = await db().query<{ total: string }>("SELECT count(*) AS total FROM usuarios");
+  return Number(rows[0]?.total ?? 0);
+}
+
+/**
+ * Cria o usuário só se ainda não existir nenhum (o protótipo é de um ciclista).
+ * Retorna null se já existir uma conta.
+ */
+export async function criarPrimeiroUsuario(
+  nome: string,
+  email: string,
+  senhaHash: string
+): Promise<UsuarioRow | null> {
+  const { rows } = await db().query<UsuarioRow>(
+    `INSERT INTO usuarios (nome, email, senha_hash)
+     SELECT $1, $2, $3
+      WHERE NOT EXISTS (SELECT 1 FROM usuarios)
+     RETURNING *`,
+    [nome, email, senhaHash]
+  );
+  return rows[0] ?? null;
+}
+
+export async function buscarUsuarioPorEmail(email: string): Promise<UsuarioRow | null> {
+  const { rows } = await db().query<UsuarioRow>("SELECT * FROM usuarios WHERE email = $1", [
+    email,
+  ]);
+  return rows[0] ?? null;
+}
+
+export async function buscarUsuarioPorId(id: number): Promise<UsuarioRow | null> {
+  const { rows } = await db().query<UsuarioRow>("SELECT * FROM usuarios WHERE id = $1", [id]);
+  return rows[0] ?? null;
 }

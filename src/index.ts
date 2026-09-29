@@ -1,5 +1,5 @@
 /**
- * Servidor intermediário — CyclistSafe 2.0
+ * Servidor intermediário — CyclistSafe 2.3
  * TypeScript + Express + WebSocket + PostgreSQL (Neon)
  *
  * TCC — IFSP Campus Presidente Epitácio
@@ -8,6 +8,7 @@
 import { createServer } from "http";
 import { retomarAlertasPendentes } from "./alertas";
 import { criarApp, ultimosStatusDispositivos } from "./app";
+import { jwtConfigurado } from "./auth";
 import { iniciarBanco } from "./db";
 import { pushConfigurado } from "./push";
 import { smsConfigurado } from "./sms";
@@ -32,11 +33,12 @@ async function iniciar(): Promise<void> {
 
   httpServer.listen(PORT, () => {
     console.log("╔════════════════════════════════════════════╗");
-    console.log("║  CyclistSafe — servidor intermediário 2.2  ║");
+    console.log("║  CyclistSafe — servidor intermediário 2.3  ║");
     console.log("║  IFSP Campus Presidente Epitácio           ║");
     console.log("╚════════════════════════════════════════════╝");
     console.log(`Porta: ${PORT}`);
     console.log(`SMS: ${smsConfigurado() ? "Twilio (envio real)" : "SIMULADO (só aparece no log)"}`);
+    console.log(`Login (JWT): ${jwtConfigurado() ? "chave configurada" : "chave TEMPORÁRIA (configure JWT_SECRET)"}`);
     console.log(`Push: ${pushConfigurado() ? "Firebase ativo" : "desativado (sem FIREBASE_SERVICE_ACCOUNT)"}`);
   });
 }

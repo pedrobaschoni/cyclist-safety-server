@@ -1,9 +1,11 @@
 /**
  * WebSocket — envia eventos em tempo real para o app do ciclista.
+ * Exige o JWT do login na URL de conexão.
  */
 
 import { Server } from "http";
 import { WebSocket, WebSocketServer } from "ws";
+import { validarToken } from "./auth";
 import { MensagemWS, TipoMensagemWS } from "./tipos";
 
 const clientes = new Set<WebSocket>();
@@ -13,7 +15,18 @@ export function inicializarWebSocket(
   httpServer: Server,
   opcoes: { aoConectar?: (enviar: (m: MensagemWS) => void) => void } = {}
 ): WebSocketServer {
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+  const wss = new WebSocketServer({
+    server: httpServer,
+    path: "/ws",
+    // Só aceita a conexão se vier com um JWT válido: wss://.../ws?token=<jwt>
+    verifyClient: (info, responder) => {
+      const url = new URL(info.req.url ?? "/", "http://localhost");
+      const token = url.searchParams.get("token");
+      if (token && validarToken(token)) return responder(true);
+      console.log("[WS] Conexão recusada: sem token válido");
+      responder(false, 401, "Unauthorized");
+    },
+  });
 
   aoConectar = opcoes.aoConectar
     ? (ws) => opcoes.aoConectar!((m) => enviarPara(ws, m))
