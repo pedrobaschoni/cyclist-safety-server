@@ -65,7 +65,7 @@ function publicarAtualizacao(q: QuedaRow): void {
 function urlPublica(): string {
   const url =
     process.env.PUBLIC_URL ||
-    process.env.RENDER_EXTERNAL_URL || // o Render define essa variável sozinho
+    process.env.RENDER_EXTERNAL_URL || // o Render define essa variável sozinho 
     `http://localhost:${process.env.PORT ?? 3000}`;
   return url.replace(/\/$/, "");
 }

@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 
 /**
  * O endereço que o Neon fornece vem com `sslmode=require&channel_binding=require`.
- * Removemos esses parâmetros da URL e ativamos o SSL diretamente no driver.
+ * Removi esses parâmetros da URL e ativei o SSL diretamente no driver.
  */
 function prepararConexao(url: string) {
   const u = new URL(url);

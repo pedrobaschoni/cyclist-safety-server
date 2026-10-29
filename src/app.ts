@@ -113,7 +113,7 @@ export function criarApp() {
       ok({
         servico: "CyclistSafe — servidor intermediário",
         versao: "2.3.0",
-        documentacao: "Veja README.md",
+        documentacao: "",
       })
     );
   });
@@ -156,7 +156,7 @@ export function criarApp() {
     })
   );
 
-  // ── ESP32: heartbeat (e compatibilidade com a versão antiga) ─
+  // ── ESP32: heartbeat  ─
   app.post(
     "/api/event",
     rota(async (req, res) => {
@@ -182,6 +182,10 @@ export function criarApp() {
         ultimaMagnitude: numero(b.magnitude),
         online: true,
       };
+      const anterior = dispositivos.get(status.deviceId);
+      if (!anterior || Date.now() - new Date(anterior.ultimaConexao).getTime() > 60_000) {
+        console.log(`[ESP32] Placa ${status.deviceId} conectada (estado: ${status.estadoFSM})`);
+      }
       dispositivos.set(status.deviceId, status);
       transmitir("STATUS", status);
       res.json(ok({ recebido: true }));
@@ -299,7 +303,7 @@ export function criarApp() {
       res.json(ok(quedaParaApi(q)));
     })
   );
-
+\
   // ── App: "Preciso de ajuda — avisar agora" ─────────────────
   app.post(
     "/api/eventos/:id/enviar-agora",
