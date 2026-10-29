@@ -303,7 +303,7 @@ export function criarApp() {
       res.json(ok(quedaParaApi(q)));
     })
   );
-\
+  
   // ── App: "Preciso de ajuda — avisar agora" ─────────────────
   app.post(
     "/api/eventos/:id/enviar-agora",
