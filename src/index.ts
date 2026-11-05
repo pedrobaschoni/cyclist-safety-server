@@ -1,5 +1,5 @@
 /**
- * Servidor intermediário — CyclistSafe 2.3
+ * Servidor intermediário — CyclistSafe 2.4
  * TypeScript + Express + WebSocket + PostgreSQL (Neon)
  *
  * TCC — IFSP Campus Presidente Epitácio
@@ -33,7 +33,7 @@ async function iniciar(): Promise<void> {
 
   httpServer.listen(PORT, () => {
     console.log("╔════════════════════════════════════════════╗");
-    console.log("║  CyclistSafe — servidor intermediário 2.3  ║");
+    console.log("║  CyclistSafe — servidor intermediário 2.4  ║");
     console.log("║  IFSP Campus Presidente Epitácio           ║");
     console.log("╚════════════════════════════════════════════╝");
     console.log(`Porta: ${PORT}`);

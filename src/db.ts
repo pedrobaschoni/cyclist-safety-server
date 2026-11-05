@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS quedas (
   contatos_avisados  INT NOT NULL DEFAULT 0,
   tentativas_envio   INT NOT NULL DEFAULT 0
 );
+-- Versão 2.4: última localização conhecida (GPS sem sinal no momento da queda)
+ALTER TABLE quedas ADD COLUMN IF NOT EXISTS localizacao_em TIMESTAMPTZ;
+ALTER TABLE quedas ADD COLUMN IF NOT EXISTS localizacao_atual BOOLEAN NOT NULL DEFAULT TRUE;
 CREATE INDEX IF NOT EXISTS idx_quedas_detectada ON quedas (detectada_em DESC);
 CREATE INDEX IF NOT EXISTS idx_quedas_status ON quedas (status);
 
@@ -81,7 +84,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 
 /**
  * O endereço que o Neon fornece vem com `sslmode=require&channel_binding=require`.
- * Removi esses parâmetros da URL e ativei o SSL diretamente no driver.
+ * Removemos esses parâmetros da URL e ativamos o SSL diretamente no driver.
  */
 function prepararConexao(url: string) {
   const u = new URL(url);
@@ -137,6 +140,11 @@ export async function encerrarBanco(): Promise<void> {
 
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 
+/** (0,0) = a placa nunca teve sinal de GPS. */
+export function temLocalizacao(lat: number, lng: number): boolean {
+  return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+}
+
 export function urlMapa(lat: number, lng: number): string {
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 }
@@ -158,6 +166,9 @@ export function quedaParaApi(r: QuedaRow): QuedaApi {
     contatosAvisados: r.contatos_avisados,
     tentativasEnvio: r.tentativas_envio,
     googleMapsUrl: urlMapa(Number(r.latitude), Number(r.longitude)),
+    temLocalizacao: temLocalizacao(Number(r.latitude), Number(r.longitude)),
+    localizacaoAtual: r.localizacao_atual ?? true,
+    localizacaoEm: iso(r.localizacao_em ?? null),
   };
 }
 
@@ -225,12 +236,18 @@ export async function inserirQueda(q: {
   latitude: number;
   longitude: number;
   prazo: Date;
+  localizacaoEm?: Date | null;
+  localizacaoAtual?: boolean;
 }): Promise<QuedaRow> {
   const { rows } = await db().query<QuedaRow>(
-    `INSERT INTO quedas (id, device_id, magnitude, latitude, longitude, status, prazo_alerta)
-     VALUES ($1, $2, $3, $4, $5, 'PRE_ALERTA', $6)
+    `INSERT INTO quedas (id, device_id, magnitude, latitude, longitude, status, prazo_alerta,
+                         localizacao_em, localizacao_atual)
+     VALUES ($1, $2, $3, $4, $5, 'PRE_ALERTA', $6, $7, $8)
      RETURNING *`,
-    [q.id, q.deviceId, q.magnitude, q.latitude, q.longitude, q.prazo]
+    [
+      q.id, q.deviceId, q.magnitude, q.latitude, q.longitude, q.prazo,
+      q.localizacaoEm ?? null, q.localizacaoAtual ?? true,
+    ]
   );
   return rows[0];
 }

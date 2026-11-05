@@ -29,6 +29,10 @@ export interface QuedaRow {
   confirmado_por: string | null;
   contatos_avisados: number;
   tentativas_envio: number;
+  /** Quando o GPS obteve a posição enviada (null = desconhecido). */
+  localizacao_em: Date | null;
+  /** false = GPS sem sinal na hora da queda; a posição é a última conhecida. */
+  localizacao_atual: boolean;
 }
 
 /** Linha da tabela `contatos`. */
@@ -63,6 +67,9 @@ export interface QuedaApi {
   contatosAvisados: number;
   tentativasEnvio: number;
   googleMapsUrl: string;
+  temLocalizacao: boolean;
+  localizacaoAtual: boolean;
+  localizacaoEm: string | null;
 }
 
 /** Último status recebido do ESP32 (heartbeat). Fica só em memória. */

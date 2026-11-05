@@ -25,6 +25,7 @@ import {
   listarContatos,
   quedaParaApi,
   quedasEmAndamento,
+  temLocalizacao,
   registrarEnvio,
   urlMapa,
 } from "./db";
@@ -62,10 +63,27 @@ function publicarAtualizacao(q: QuedaRow): void {
 //  Endereço público (para o link do SMS)
 // ─────────────────────────────────────────
 
-/** Texto do local para o SMS. (0,0) = a placa ainda não tinha sinal de GPS. */
-function textoLocal(lat: number, lng: number): string {
-  const semGps = !Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0);
-  return semGps ? "Local: indisponivel (sem sinal de GPS) " : `Local: ${urlMapa(lat, lng)} `;
+/**
+ * Texto do local para o SMS.
+ *  - posição atual:            "Local: <link>"
+ *  - GPS sem sinal na queda:   "Ultimo local conhecido (as 14:32, 12 min antes): <link>"
+ *  - nunca teve sinal (0,0):   "Local: indisponivel (sem sinal de GPS)"
+ */
+function textoLocal(q: QuedaRow): string {
+  const lat = Number(q.latitude);
+  const lng = Number(q.longitude);
+  if (!temLocalizacao(lat, lng)) return "Local: indisponivel (sem sinal de GPS) ";
+  if (q.localizacao_atual !== false) return `Local: ${urlMapa(lat, lng)} `;
+
+  let quando = "horario desconhecido";
+  if (q.localizacao_em) {
+    const min = Math.max(
+      0,
+      Math.round((new Date(q.detectada_em).getTime() - new Date(q.localizacao_em).getTime()) / 60000)
+    );
+    quando = `as ${horaBrasil(q.localizacao_em)}, ${min} min antes da queda`;
+  }
+  return `Ultimo local conhecido (${quando}): ${urlMapa(lat, lng)} `;
 }
 
 function urlPublica(): string {
@@ -97,16 +115,26 @@ export async function registrarQueda(dados: {
   magnitude: number;
   latitude: number;
   longitude: number;
+  localizacaoEm?: Date | null;
+  localizacaoAtual?: boolean;
 }): Promise<QuedaRow> {
   const { tempoPreAlerta } = await lerConfiguracao();
   const prazo = new Date(Date.now() + tempoPreAlerta * 1000);
 
   const q = await inserirQueda({ id: randomUUID(), ...dados, prazo });
   transmitir("QUEDA", quedaParaApi(q));
+  // Só dados (sem "notification"): quem mostra o alerta é o próprio app,
+  // em TELA CHEIA, mesmo com o app fechado e o celular bloqueado.
   void enviarPush(
     "⚠️ Possível queda detectada",
     `Toque para responder. Seus contatos serão avisados em ${tempoPreAlerta} s se você não disser que está bem.`,
-    { quedaId: q.id, tipo: "QUEDA" }
+    {
+      quedaId: q.id,
+      tipo: "QUEDA",
+      prazo: new Date(q.prazo_alerta).toISOString(),
+      magnitude: String(q.magnitude),
+    },
+    { telaCheia: true }
   );
   agendar(q.id, prazo.getTime() - Date.now(), () => dispararAlerta(q.id).then(() => undefined));
 
@@ -147,7 +175,7 @@ export async function dispararAlerta(quedaId: string): Promise<QuedaRow | null> 
     const texto =
       `CyclistSafe: ${nome} pode ter sofrido uma queda de bicicleta ` +
       `(${formatarG(q.magnitude)}) as ${horaBrasil(q.detectada_em)}. ` +
-      textoLocal(Number(q.latitude), Number(q.longitude)) +
+      textoLocal(q) +
       `Confirme que viu: ${urlPublica()}/c/${token}`;
     await enviarParaContato(q.id, c, "ALERTA", texto);
   }
@@ -197,7 +225,7 @@ async function reenviarAlerta(quedaId: string): Promise<void> {
     const texto =
       `LEMBRETE CyclistSafe (${q.tentativas_envio}/${MAX_TENTATIVAS}): ` +
       `${nome} ainda nao respondeu depois da queda. ` +
-      textoLocal(Number(q.latitude), Number(q.longitude)) +
+      textoLocal(q) +
       `Confirme que viu: ${urlPublica()}/c/${token}`;
     await enviarParaContato(q.id, c, "LEMBRETE", texto);
   }

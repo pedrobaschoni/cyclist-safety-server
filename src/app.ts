@@ -38,7 +38,7 @@ import {
 } from "./db";
 import { pushConfigurado } from "./push";
 import { paginaConfirmacao, paginaLinkInvalido } from "./paginas";
-import { smsConfigurado } from "./sms";
+import { provedorSms } from "./sms";
 import { ApiResposta, StatusDispositivo } from "./tipos";
 import { clientesConectados, transmitir } from "./websocket";
 
@@ -89,6 +89,30 @@ function numero(valor: unknown, padrao = 0): number {
   return Number.isFinite(n) ? n : padrao;
 }
 
+/**
+ * Quando a placa está sem sinal de GPS, ela manda a ÚLTIMA posição conhecida:
+ *   gpsAtual:   false
+ *   gpsEpoch:   horário UTC (segundos) em que o GPS obteve essa posição
+ *   gpsIdadeSeg: há quantos segundos foi (se a placa não souber o horário)
+ * Placas antigas não mandam nada disso → posição considerada atual.
+ */
+function lerLocalizacao(b: Record<string, unknown>): {
+  localizacaoAtual: boolean;
+  localizacaoEm: Date | null;
+} {
+  const agora = Date.now();
+  if (b.gpsAtual !== false && b.gpsAtual !== "false" && b.gpsAtual !== 0) {
+    return { localizacaoAtual: true, localizacaoEm: new Date(agora) };
+  }
+  const epoch = numero(b.gpsEpoch, 0);
+  if (epoch > 1_600_000_000 && epoch * 1000 <= agora + 5 * 60_000) {
+    return { localizacaoAtual: false, localizacaoEm: new Date(epoch * 1000) };
+  }
+  const idade = numero(b.gpsIdadeSeg, -1);
+  if (idade >= 0) return { localizacaoAtual: false, localizacaoEm: new Date(agora - idade * 1000) };
+  return { localizacaoAtual: false, localizacaoEm: null };
+}
+
 /** Normaliza para o formato internacional: +55 + DDD + número. */
 function telefoneInternacional(tel: string): string {
   const d = String(tel).replace(/\D/g, "");
@@ -112,8 +136,8 @@ export function criarApp() {
     res.json(
       ok({
         servico: "CyclistSafe — servidor intermediário",
-        versao: "2.3.0",
-        documentacao: "",
+        versao: "2.4.0",
+        documentacao: "Veja README.md",
       })
     );
   });
@@ -125,9 +149,9 @@ export function criarApp() {
       res.json(
         ok({
           status: "ok",
-          versao: "2.3.0",
+          versao: "2.4.0",
           banco: "conectado",
-          sms: smsConfigurado() ? "twilio" : "simulado",
+          sms: provedorSms(),
           push: pushConfigurado() ? "firebase" : "desativado",
           jwt: jwtConfigurado() ? "configurado" : "chave temporária",
           nomeCiclista: config.nomeCiclista,
@@ -151,12 +175,13 @@ export function criarApp() {
         magnitude: numero(b.magnitude),
         latitude: numero(b.latitude ?? b.lat),
         longitude: numero(b.longitude ?? b.lng),
+        ...lerLocalizacao(b),
       });
       res.status(201).json(ok(quedaParaApi(q)));
     })
   );
 
-  // ── ESP32: heartbeat  ─
+  // ── ESP32: heartbeat (e compatibilidade com a versão antiga) ─
   app.post(
     "/api/event",
     rota(async (req, res) => {
@@ -303,7 +328,7 @@ export function criarApp() {
       res.json(ok(quedaParaApi(q)));
     })
   );
-  
+
   // ── App: "Preciso de ajuda — avisar agora" ─────────────────
   app.post(
     "/api/eventos/:id/enviar-agora",

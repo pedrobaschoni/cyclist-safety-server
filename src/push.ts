@@ -52,11 +52,16 @@ export function pushConfigurado(): boolean {
 /**
  * Envia uma notificação para todos os celulares registrados.
  * `dados` chega ao app quando o usuário toca na notificação.
+ *
+ * telaCheia = true → mensagem SÓ DE DADOS: o Android não mostra nada sozinho;
+ * o app recebe em segundo plano e abre o alerta em tela cheia (mesmo com o
+ * celular bloqueado), como um despertador.
  */
 export async function enviarPush(
   titulo: string,
   corpo: string,
-  dados: Record<string, string>
+  dados: Record<string, string>,
+  opcoes: { telaCheia?: boolean } = {}
 ): Promise<void> {
   const app = iniciarFirebase();
   if (!app) return;
@@ -68,7 +73,15 @@ export async function enviarPush(
   }
 
   try {
-    const resposta = await getMessaging(app).sendEachForMulticast({
+    const mensagem = opcoes.telaCheia
+      ? {
+          tokens,
+          data: { ...dados, titulo, corpo, telaCheia: "1" },
+          android: { priority: "high" as const, ttl: 10 * 60 * 1000 },
+        }
+      : null;
+
+    const resposta = await getMessaging(app).sendEachForMulticast(mensagem ?? {
       tokens,
       notification: { title: titulo, body: corpo },
       data: dados,
