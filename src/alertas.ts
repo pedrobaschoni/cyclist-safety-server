@@ -62,10 +62,16 @@ function publicarAtualizacao(q: QuedaRow): void {
 //  Endereço público (para o link do SMS)
 // ─────────────────────────────────────────
 
+/** Texto do local para o SMS. (0,0) = a placa ainda não tinha sinal de GPS. */
+function textoLocal(lat: number, lng: number): string {
+  const semGps = !Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0);
+  return semGps ? "Local: indisponivel (sem sinal de GPS) " : `Local: ${urlMapa(lat, lng)} `;
+}
+
 function urlPublica(): string {
   const url =
     process.env.PUBLIC_URL ||
-    process.env.RENDER_EXTERNAL_URL || // o Render define essa variável sozinho 
+    process.env.RENDER_EXTERNAL_URL || // o Render define essa variável sozinho
     `http://localhost:${process.env.PORT ?? 3000}`;
   return url.replace(/\/$/, "");
 }
@@ -141,7 +147,7 @@ export async function dispararAlerta(quedaId: string): Promise<QuedaRow | null> 
     const texto =
       `CyclistSafe: ${nome} pode ter sofrido uma queda de bicicleta ` +
       `(${formatarG(q.magnitude)}) as ${horaBrasil(q.detectada_em)}. ` +
-      `Local: ${urlMapa(q.latitude, q.longitude)} ` +
+      textoLocal(Number(q.latitude), Number(q.longitude)) +
       `Confirme que viu: ${urlPublica()}/c/${token}`;
     await enviarParaContato(q.id, c, "ALERTA", texto);
   }
@@ -191,7 +197,7 @@ async function reenviarAlerta(quedaId: string): Promise<void> {
     const texto =
       `LEMBRETE CyclistSafe (${q.tentativas_envio}/${MAX_TENTATIVAS}): ` +
       `${nome} ainda nao respondeu depois da queda. ` +
-      `Local: ${urlMapa(q.latitude, q.longitude)} ` +
+      textoLocal(Number(q.latitude), Number(q.longitude)) +
       `Confirme que viu: ${urlPublica()}/c/${token}`;
     await enviarParaContato(q.id, c, "LEMBRETE", texto);
   }

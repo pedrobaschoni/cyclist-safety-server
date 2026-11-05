@@ -11,7 +11,7 @@ import { criarApp, ultimosStatusDispositivos } from "./app";
 import { jwtConfigurado } from "./auth";
 import { iniciarBanco } from "./db";
 import { pushConfigurado } from "./push";
-import { smsConfigurado } from "./sms";
+import { provedorSms, smsConfigurado } from "./sms";
 import { inicializarWebSocket } from "./websocket";
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -33,11 +33,13 @@ async function iniciar(): Promise<void> {
 
   httpServer.listen(PORT, () => {
     console.log("╔════════════════════════════════════════════╗");
-    console.log("║  CyclistSafe — servidor intermediário      ║");
+    console.log("║  CyclistSafe — servidor intermediário 2.3  ║");
     console.log("║  IFSP Campus Presidente Epitácio           ║");
     console.log("╚════════════════════════════════════════════╝");
     console.log(`Porta: ${PORT}`);
-    console.log(`SMS: ${smsConfigurado() ? "Twilio (envio real)" : "SIMULADO (só aparece no log)"}`);
+    console.log(`SMS: ${smsConfigurado() ? provedorSms() + " (envio real)" : "SIMULADO (só aparece no log)"}`);
+    console.log(`Login (JWT): ${jwtConfigurado() ? "chave configurada" : "chave TEMPORÁRIA (configure JWT_SECRET)"}`);
+    console.log(`Push: ${pushConfigurado() ? "Firebase ativo" : "desativado (sem FIREBASE_SERVICE_ACCOUNT)"}`);
   });
 }
 
