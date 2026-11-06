@@ -27,7 +27,6 @@ import {
   quedasEmAndamento,
   temLocalizacao,
   registrarEnvio,
-  urlMapa,
 } from "./db";
 import { enviarPush } from "./push";
 import { enviarSms } from "./sms";
@@ -64,26 +63,14 @@ function publicarAtualizacao(q: QuedaRow): void {
 // ─────────────────────────────────────────
 
 /**
- * Texto do local para o SMS.
- *  - posição atual:            "Local: <link>"
- *  - GPS sem sinal na queda:   "Ultimo local conhecido (as 14:32, 12 min antes): <link>"
- *  - nunca teve sinal (0,0):   "Local: indisponivel (sem sinal de GPS)"
+ * Como o local aparece no SMS. O SMS leva UM link só (a página de
+ * confirmação, que mostra o mapa): mensagem com dois links longos passava de
+ * 160 caracteres, virava SMS em várias partes e às vezes não era entregue.
  */
-function textoLocal(q: QuedaRow): string {
-  const lat = Number(q.latitude);
-  const lng = Number(q.longitude);
-  if (!temLocalizacao(lat, lng)) return "Local: indisponivel (sem sinal de GPS) ";
-  if (q.localizacao_atual !== false) return `Local: ${urlMapa(lat, lng)} `;
-
-  let quando = "horario desconhecido";
-  if (q.localizacao_em) {
-    const min = Math.max(
-      0,
-      Math.round((new Date(q.detectada_em).getTime() - new Date(q.localizacao_em).getTime()) / 60000)
-    );
-    quando = `as ${horaBrasil(q.localizacao_em)}, ${min} min antes da queda`;
-  }
-  return `Ultimo local conhecido (${quando}): ${urlMapa(lat, lng)} `;
+function chamadaLocal(q: QuedaRow): string {
+  if (!temLocalizacao(Number(q.latitude), Number(q.longitude))) return "Local indisponivel. Confirme: ";
+  if (q.localizacao_atual === false) return "Sem GPS agora; ultimo local no link: ";
+  return "Veja onde e confirme: ";
 }
 
 function urlPublica(): string {
@@ -172,11 +159,11 @@ export async function dispararAlerta(quedaId: string): Promise<QuedaRow | null> 
   for (const c of contatos) {
     const token = randomBytes(6).toString("base64url");
     await criarLinkConfirmacao(token, q.id, c.nome);
+    // Curto (até ~160 caracteres = 1 SMS) e com um link só
     const texto =
-      `CyclistSafe: ${nome} pode ter sofrido uma queda de bicicleta ` +
-      `(${formatarG(q.magnitude)}) as ${horaBrasil(q.detectada_em)}. ` +
-      textoLocal(q) +
-      `Confirme que viu: ${urlPublica()}/c/${token}`;
+      `CyclistSafe: possivel queda de ${nome} as ${horaBrasil(q.detectada_em)}. ` +
+      chamadaLocal(q) +
+      `${urlPublica()}/c/${token}`;
     await enviarParaContato(q.id, c, "ALERTA", texto);
   }
 
@@ -223,10 +210,9 @@ async function reenviarAlerta(quedaId: string): Promise<void> {
     const token = randomBytes(6).toString("base64url");
     await criarLinkConfirmacao(token, q.id, c.nome);
     const texto =
-      `LEMBRETE CyclistSafe (${q.tentativas_envio}/${MAX_TENTATIVAS}): ` +
-      `${nome} ainda nao respondeu depois da queda. ` +
-      textoLocal(q) +
-      `Confirme que viu: ${urlPublica()}/c/${token}`;
+      `CyclistSafe LEMBRETE (${q.tentativas_envio}/${MAX_TENTATIVAS}): ` +
+      `${nome} ainda nao respondeu. Veja e confirme: ` +
+      `${urlPublica()}/c/${token}`;
     await enviarParaContato(q.id, c, "LEMBRETE", texto);
   }
 

@@ -3,7 +3,7 @@
  * Mostra onde foi a queda e tem o botão "Vi o alerta".
  */
 
-import { urlMapa } from "./db";
+import { temLocalizacao, urlMapa } from "./db";
 import { QuedaRow } from "./tipos";
 
 function escapar(texto: string): string {
@@ -106,10 +106,21 @@ export function paginaConfirmacao(
   const nome = escapar(nomeCiclista || "O ciclista");
   const acompanhar = { token, status: q.status };
   const mapa = urlMapa(q.latitude, q.longitude);
+  let local: string;
+  if (!temLocalizacao(Number(q.latitude), Number(q.longitude))) {
+    local = `<div class="linha"><span>Localização</span><span>Sem sinal de GPS</span></div>`;
+  } else if (q.localizacao_atual === false) {
+    const quando = q.localizacao_em ? `às ${horaBrasil(q.localizacao_em)}` : "horário desconhecido";
+    local = `<div class="linha"><span>Último local conhecido</span><span>${quando}</span></div>
+    <p style="font-size:14px;opacity:.8">O GPS estava sem sinal na hora da queda (túnel, prédio...). O mapa mostra o último lugar em que ele teve sinal.</p>
+    <a class="botao secundario" href="${mapa}" target="_blank" rel="noopener">📍 Ver último local no mapa</a>`;
+  } else {
+    local = `<a class="botao secundario" href="${mapa}" target="_blank" rel="noopener">📍 Ver localização no mapa</a>`;
+  }
   const detalhes = `
     <div class="linha"><span>Horário</span><span>${horaBrasil(q.detectada_em)}</span></div>
     <div class="linha"><span>Força do impacto</span><span>${Number(q.magnitude).toFixed(2).replace(".", ",")} g</span></div>
-    <a class="botao secundario" href="${mapa}" target="_blank" rel="noopener">📍 Ver localização no mapa</a>`;
+    ${local}`;
 
   if (q.status === "CANCELADO") {
     return layout(
