@@ -7,7 +7,7 @@
 
 import { createServer } from "http";
 import { retomarAlertasPendentes } from "./alertas";
-import { criarApp, ultimosStatusDispositivos } from "./app";
+import { criarApp, statusDispositivosOnline } from "./app";
 import { jwtConfigurado } from "./auth";
 import { iniciarBanco } from "./db";
 import { pushConfigurado } from "./push";
@@ -25,7 +25,7 @@ async function iniciar(): Promise<void> {
   inicializarWebSocket(httpServer, {
     // Quem acabou de conectar já recebe o último status do ESP32
     aoConectar: (enviar) => {
-      for (const s of ultimosStatusDispositivos()) enviar({ tipo: "STATUS", payload: s });
+      for (const s of statusDispositivosOnline()) enviar({ tipo: "STATUS", payload: s });
     },
   });
 

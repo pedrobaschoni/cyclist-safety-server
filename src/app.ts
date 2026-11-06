@@ -45,8 +45,25 @@ import { clientesConectados, transmitir } from "./websocket";
 // Último status de cada ESP32 (heartbeat). Não precisa ir para o banco.
 const dispositivos = new Map<string, StatusDispositivo>();
 
+/** A placa manda heartbeat a cada 8 s: sem sinal há mais de 30 s = offline. */
+const SEGUNDOS_PLACA_OFFLINE = 30;
+
+function placaOnline(s: StatusDispositivo): boolean {
+  return Date.now() - new Date(s.ultimaConexao).getTime() < SEGUNDOS_PLACA_OFFLINE * 1000;
+}
+
+/** Todas as placas já vistas, com "online" calculado na hora. */
 export function ultimosStatusDispositivos(): StatusDispositivo[] {
-  return [...dispositivos.values()];
+  return [...dispositivos.values()].map((s) => ({ ...s, online: placaOnline(s) }));
+}
+
+/**
+ * Só as placas que mandaram sinal agora há pouco. É o que vai para o app
+ * quando ele conecta no WebSocket: antes ia o último status mesmo que fosse
+ * de horas atrás, e o app mostrava "sensor online" com a placa desligada.
+ */
+export function statusDispositivosOnline(): StatusDispositivo[] {
+  return ultimosStatusDispositivos().filter((s) => s.online);
 }
 
 function ok<T>(dados: T): ApiResposta<T> {
